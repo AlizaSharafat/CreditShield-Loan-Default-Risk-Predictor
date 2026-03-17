@@ -2,7 +2,8 @@ import pandas as pd
 import numpy as np
 
 # Loading cleaned data 
-df = pd.read_csv("outputs/cleaned.csv")
+#df = pd.read_csv("outputs/cleaned.csv")
+df = pd.read_csv("../outputs/cleaned.csv")
 print("Loaded shape:", df.shape)
 
 features = [
@@ -105,5 +106,6 @@ for col in features:
     print(f"  {col:<28} {df[col].min():>10.2f} {df[col].max():>10.2f} {df[col].median():>10.2f}")
 
 # Save
-df.to_csv("outputs/outliers_handled.csv", index=False)
+df.to_csv("../outputs/outliers_handled.csv", index=False)
+#df.to_csv("outputs/outliers_handled.csv", index=False)
 print(f"\nSaved: outputs/outliers_handled.csv ({df.shape[0]:,} rows)")
