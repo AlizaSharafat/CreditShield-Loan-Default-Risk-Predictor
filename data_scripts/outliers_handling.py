@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-# Load cleaned data from Script 1
+# Loading cleaned data 
 df = pd.read_csv("outputs/cleaned.csv")
 print("Loaded shape:", df.shape)
 
