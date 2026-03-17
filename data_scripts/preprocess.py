@@ -112,4 +112,3 @@ print(f"  Imbalance ratio: {target_counts[0] / target_counts[1]:.1f} : 1")
 
 df.to_csv("outputs/cleaned.csv", index=False)
 print(f"\nSaved: outputs/cleaned.csv ({df.shape[0]:,} rows x {df.shape[1]} cols)")
-print("Script 1 complete.")
