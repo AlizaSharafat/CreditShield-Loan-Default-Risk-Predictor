@@ -16,7 +16,8 @@ print(df.dtypes)
 categorical_cols = df.select_dtypes(include=["object", "category"]).columns.tolist()
 numerical_cols = df.select_dtypes(include=["int64", "float64"]).columns.tolist()
 
-print(f"\nCategorical columns: {categorical_cols if categorical_cols else 'None\n'}")
+print(f"\nCategorical columns: {categorical_cols if categorical_cols else 'None'}\n")
+#print(f"\nCategorical columns: {categorical_cols if categorical_cols else 'None\n'}")
 print(f"Numerical columns  : {numerical_cols}")
 
 print("\nAll features are numerical — no categorical encoding needed.")
