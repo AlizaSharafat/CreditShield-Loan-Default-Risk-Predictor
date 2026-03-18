@@ -3,8 +3,7 @@
 CreditShield Loan Default Risk Predictor is a machine learning project that predicts borrower default risk using the Give Me Some Credit dataset(a competotion dataset downloaded from kaggle). The goal is to support faster and more consistent lending decisions by classifying applicants into risk categories based on their financial and credit behavior data.
 
 ## Link to the "Give Me Some Credit" Dataset
-
-# CreditShield Loan Default Risk Predictor
+https://www.kaggle.com/competitions/GiveMeSomeCredit/data
 
 ## Project Objective
 
