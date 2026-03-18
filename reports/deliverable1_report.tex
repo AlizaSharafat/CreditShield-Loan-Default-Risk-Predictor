@@ -1,0 +1,323 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Deliverable 1}
+\lhead{Loan Default Risk Prediction}
+\cfoot{\thepage}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\title{\textbf{Loan Default Risk Prediction} \\ \large Deliverable 1: Problem Definition \& Data Foundations}
+\author{23L-2524 \\ 23L-2560}
+\date{\vspace{-2em}}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+
+\section{Phase 1: Problem Definition}
+
+\subsection{Problem Statement}
+
+Financial institutions process thousands of loan applications daily. Manual credit risk assessment is slow, inconsistent, and prone to human bias. A single bad lending decision can result in significant financial loss, while overly conservative decisions reject creditworthy applicants.
+
+This project builds a machine learning application that predicts loan default risk using applicant financial and credit behavior data. The system accepts new applicant information as input, analyzes key financial and credit factors, and returns a default-risk prediction classified into \textbf{Low}, \textbf{Medium}, or \textbf{High} risk categories. Each prediction includes explainable insights showing the specific factors that influenced the decision, enabling loan officers to make faster, more consistent, and transparent lending decisions.
+
+\subsection{Target Audience}
+
+The primary users of this tool are:
+\begin{itemize}[noitemsep]
+    \item \textbf{Loan officers and credit analysts} at banks and lending institutions who need a fast, data-driven second opinion on applicant risk.
+    \item \textbf{Risk management teams} who need consistent, auditable criteria for loan approval decisions.
+    \item \textbf{Fintech companies} offering automated lending products that require real-time risk scoring with regulatory-compliant explanations.
+\end{itemize}
+
+\subsection{AI Justification}
+
+Traditional rule-based credit scoring relies on fixed thresholds (e.g., ``reject if debt ratio $>$ 0.5''). This approach fails to capture the complex, non-linear interactions between financial variables that predict default. For example:
+
+\begin{itemize}[noitemsep]
+    \item A high debt ratio may be acceptable for a young borrower with zero delinquencies, but dangerous for an older borrower with past late payments.
+    \item Credit utilization above 75\% combined with multiple recent inquiries signals very different risk than the same utilization with a stable credit history.
+\end{itemize}
+
+Machine learning models can learn these multi-variable interaction patterns from historical data, delivering more accurate and nuanced risk assessments than static rules. Specifically:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Non-linearity}: Tree-based models (Random Forest, XGBoost) capture threshold effects and feature interactions without manual rule writing.
+    \item \textbf{Scalability}: A trained model scores thousands of applicants per second, compared to minutes per application for manual review.
+    \item \textbf{Explainability}: SHAP and LIME provide per-prediction explanations, satisfying regulatory requirements for transparent lending decisions.
+\end{itemize}
+
+\newpage
+
+
+\section{Phase 2: Data Acquisition \& Preprocessing}
+
+\subsection{Dataset Overview}
+
+The dataset used is \textbf{Give Me Some Credit} from Kaggle, a widely-used benchmark for credit risk modeling. It contains historical borrower data with a binary target variable indicating whether the borrower experienced serious delinquency within 2 years.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Source & Kaggle (Give Me Some Credit) \\
+Training rows & 150,000 \\
+Test rows & Separate file (cs-test.csv) \\
+Features & 10 numerical \\
+Target & SeriousDlqin2yrs (0 = No Default, 1 = Default) \\
+Class balance & 93.3\% No Default / 6.7\% Default \\
+\bottomrule
+\end{tabular}
+\caption{Dataset summary}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{lll}
+\toprule
+\textbf{Original Name} & \textbf{Mapped Name} & \textbf{Description} \\
+\midrule
+RevolvingUtilizationOfUnsecuredLines & RevolvingUtilization & Credit card balance / limit \\
+age & Age & Borrower age in years \\
+NumberOfTime30-59DaysPastDueNotWorse & Times30\_59Late & 30--59 day late payments \\
+DebtRatio & DebtRatio & Monthly debt / income \\
+MonthlyIncome & MonthlyIncome & Gross monthly income \\
+NumberOfOpenCreditLinesAndLoans & OpenCreditLines & Open credit lines count \\
+NumberOfTimes90DaysLate & Times90Late & 90+ day late payments \\
+NumberRealEstateLoansOrLines & RealEstateLines & Real estate loan count \\
+NumberOfTime60-89DaysPastDueNotWorse & Times60\_89Late & 60--89 day late payments \\
+NumberOfDependents & Dependents & Number of dependents \\
+\bottomrule
+\end{tabular}
+\caption{Feature descriptions and column mapping}
+\end{table}
+
+\newpage
+
+\subsection{Data Cleaning}
+
+\subsubsection{Missing Values}
+
+Two columns had missing values:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrl}
+\toprule
+\textbf{Column} & \textbf{Missing} & \textbf{\%} & \textbf{Action} \\
+\midrule
+MonthlyIncome & 29,731 & 19.82\% & Filled with median (5,400) \\
+Dependents & 3,924 & 2.62\% & Filled with median (0) \\
+Age & 1 & $<$0.01\% & Age = 0 replaced with median (52) \\
+\bottomrule
+\end{tabular}
+\caption{Missing value handling}
+\end{table}
+
+\textbf{Why median?} Both MonthlyIncome (skewness = 114.04) and Dependents (skewness = 1.59) are heavily right-skewed. Using the mean would overestimate typical values because it gets pulled up by extreme outliers. The median is robust to this skew.
+
+\subsubsection{Duplicate Rows}
+
+767 duplicate rows were found and removed, reducing the dataset from 150,000 to 149,233 rows.
+
+\subsection{Exploratory Data Analysis}
+
+\subsubsection{Target Class Distribution}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.55\textwidth]{01_target_distribution.png}
+\caption{Target class distribution}
+\end{figure}
+
+The dataset is heavily imbalanced --- 93.3\% of borrowers did not default while only 6.7\% did. This means any model trained without addressing this imbalance would achieve 93\% accuracy by simply predicting ``No Default'' for everyone, which is useless in practice. This will be handled via SMOTE in the modeling phase.
+
+\subsubsection{Feature Distributions}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{02_feature_distributions.png}
+\caption{Feature distributions with median lines}
+\end{figure}
+
+Most features are right-skewed with long tails. RevolvingUtilization and DebtRatio have extreme maximum values (50,708 and 329,664 respectively) while their medians are near 0.15 and 0.37 --- clear evidence of severe outliers. The late payment features (Times30\_59Late, Times60\_89Late, Times90Late) show that the vast majority of borrowers have zero late payments, with a small group having extreme counts up to 98, which are sentinel codes rather than real values.
+
+\subsubsection{Correlation Heatmap}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{03_correlation_heatmap.png}
+\caption{Feature correlation matrix}
+\end{figure}
+
+The three late payment features are highly correlated with each other (0.70--0.84), which is expected since a borrower who is 90+ days late has usually also been 30--59 and 60--89 days late. The strongest individual correlations with the target are RevolvingUtilization (0.28), Times30\_59Late (0.25), and Times90Late (0.24). Age has a negative correlation with default (-0.12), meaning younger borrowers default more often.
+
+\subsubsection{Feature Distributions by Target Class}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=\textwidth]{04_boxplots_by_target.png}
+\caption{Boxplots of features grouped by target class}
+\end{figure}
+
+Defaulters (class 1) show noticeably higher RevolvingUtilization and more late payments compared to non-defaulters. The boxplots also expose outliers --- both classes contain extreme values in DebtRatio and MonthlyIncome (dots far beyond the whiskers), confirming the need for outlier treatment before modeling.
+
+\subsubsection{Age Distribution by Target}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{05_age_by_target.png}
+\caption{Age distribution by default status}
+\end{figure}
+
+The default group (red) is shifted toward younger ages compared to non-defaulters (green). Younger borrowers have a higher concentration in the default class, while the non-default group is more evenly spread and peaks later. This suggests age is a useful predictor of default risk.
+
+\subsubsection{Default Rate by Age Group}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{06_default_rate_by_age.png}
+\caption{Default rate by age group}
+\end{figure}
+
+Default rate decreases steadily with age --- from 11.7\% for borrowers under 30 down to 2.3\% for those over 70. This confirms a clear monotonic relationship: younger borrowers carry significantly higher default risk, possibly due to shorter credit histories and lower financial stability.
+
+\subsubsection{Default Rate by Credit Utilization}
+
+\begin{samepage}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.6\textwidth]{07_default_rate_by_utilization.png}
+\caption{Default rate by revolving credit utilization}
+\end{figure}
+
+\noindent Higher credit utilization directly maps to higher default risk. Borrowers using less than 25\% of their credit limit default at only 2.0\%, while those exceeding 100\% (overlimit) default at 37.2\%. The $>$100\% group also flags potential data quality issues --- utilization above 1.0 may indicate data errors or extreme financial distress, both of which justify outlier capping.
+\end{samepage}
+
+\subsection{Outlier Detection and Treatment}
+
+Outliers were first identified using the IQR method, then treated using capping (winsorization) at the 99th percentile. Capping was chosen over removal to preserve data volume.
+
+\subsubsection{Identified Issues}
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Sentinel codes}: The late payment columns contain values 96 and 98, which are codes (not real counts). 216 rows affected per column --- capped at 20.
+    \item \textbf{RevolvingUtilization}: Max value of 50,708 vs median of 0.15 --- clear data errors. Capped at 99th percentile (1.09).
+    \item \textbf{DebtRatio}: Max value of 329,664 vs median of 0.37 --- capped at 99th percentile (4,988).
+    \item \textbf{MonthlyIncome}: Max value of 3,008,750 vs median of 5,400 --- capped at 99th percentile (23,098).
+    \item \textbf{OpenCreditLines}: Capped at 99th percentile (24).
+    \item \textbf{RealEstateLines}: Capped at 99th percentile (4).
+\end{itemize}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Feature} & \textbf{Min} & \textbf{Max (After)} & \textbf{Median} \\
+\midrule
+RevolvingUtilization & 0.00 & 1.09 & 0.15 \\
+Age & 21.00 & 109.00 & 52.00 \\
+DebtRatio & 0.00 & 4,988.04 & 0.37 \\
+MonthlyIncome & 0.00 & 23,097.76 & 5,400.00 \\
+OpenCreditLines & 0.00 & 24.00 & 8.00 \\
+RealEstateLines & 0.00 & 4.00 & 1.00 \\
+Dependents & 0.00 & 20.00 & 0.00 \\
+Times30\_59Late & 0.00 & 20.00 & 0.00 \\
+Times60\_89Late & 0.00 & 20.00 & 0.00 \\
+Times90Late & 0.00 & 20.00 & 0.00 \\
+\bottomrule
+\end{tabular}
+\caption{Feature ranges after outlier treatment}
+\end{table}
+
+\newpage
+
+\subsection{Normalization and Scaling}
+
+\subsubsection{Encoding}
+
+All features in this dataset are numerical. No categorical encoding (one-hot or label encoding) was required. The target variable is already binary (0/1).
+
+\subsubsection{Scaler Comparison}
+
+Three scalers were compared on the MonthlyIncome feature:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Scaler} & \textbf{Min} & \textbf{Max} & \textbf{Mean} & \textbf{Std} \\
+\midrule
+StandardScaler & -1.60 & 4.41 & 0.00 & 1.00 \\
+MinMaxScaler & 0.00 & 1.00 & 0.27 & 0.17 \\
+RobustScaler & -1.54 & 5.04 & 0.21 & 1.10 \\
+\bottomrule
+\end{tabular}
+\caption{Scaler comparison on MonthlyIncome}
+\end{table}
+
+\textbf{RobustScaler} was selected because it uses the median and interquartile range (IQR) instead of the mean and standard deviation. Since several features (DebtRatio, RevolvingUtilization) still have skewed distributions even after outlier capping, RobustScaler is less sensitive to remaining extreme values than StandardScaler or MinMaxScaler. The scaler was fitted on the training data and saved as a pickle file for later use on the test set.
+
+\newpage
+
+\section{Repository Structure}
+
+\begin{verbatim}
+CreditShield-Loan-Default-Risk-Predictor/
+|-- README.md
+|-- .gitignore
+|-- requirements.txt
+|-- data_scripts/
+|   |-- preprocess.py
+|   |-- eda.py
+|   |-- outliers_handling.py
+|   |-- scaling_normalization.py
+|-- figures/
+|   |-- 01_target_distribution.png
+|   |-- 02_feature_distributions.png
+|   |-- 03_correlation_heatmap.png
+|   |-- 04_boxplots_by_target.png
+|   |-- 05_age_by_target.png
+|   |-- 06_default_rate_by_age.png
+|   |-- 07_default_rate_by_utilization.png
+|-- outputs/
+|   |-- cleaned.csv
+|   |-- outliers_handled.csv
+|   |-- scaled_dataset.csv
+|   |-- robust_scaler.pkl
+|-- reports/
+|   |-- deliverable1_report.tex
+|   |-- deliverable1_report.pdf
+\end{verbatim}
+
+\section{Pipeline Execution Order}
+
+\begin{enumerate}[noitemsep]
+    \item \texttt{preprocess.py} -- Load data, map columns, impute missing values, remove duplicates
+    \item \texttt{eda.py} -- Generate 7 EDA charts (saved to \texttt{figures/})
+    \item \texttt{outliers\_handling.py} -- Detect and handle outliers 
+    \item \texttt{scaling\_normalization.py} -- Encoding check, comparing different scalers , apply RobustScaler
+\end{enumerate}
+
+\end{document}
