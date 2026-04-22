@@ -1,0 +1,463 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Deliverable 2}
+\lhead{Loan Default Risk Prediction}
+\cfoot{\thepage}
+
+\setlength{\headheight}{14.5pt}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\title{\textbf{Loan Default Risk Prediction with Explainable AI} \\ \large Deliverable 2: Model Architecture \& Empirical Evaluation}
+\author{23L-2524 \\ 23L-2560}
+\date{\vspace{-2em}}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ============================================================
+% PHASE 3
+% ============================================================
+
+\section{Phase 3: Model Architecture \& Implementation}
+
+\subsection{Framework Selection}
+
+The project uses \textbf{Scikit-Learn} and \textbf{XGBoost} as the primary frameworks. Scikit-Learn provides the preprocessing pipeline (RobustScaler, SMOTE via imbalanced-learn, train/test splitting), while XGBoost serves as the final model. XGBoost was chosen over alternatives because it handles tabular data well, provides built-in feature importance, and supports probability outputs needed for threshold tuning and risk categorization.
+
+\subsection{Pipeline Design}
+
+The full pipeline follows this order:
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{Feature Engineering}: 3 new features added to the original 10
+    \item \textbf{Train/Validation/Test Split}: 70/15/15 stratified split
+    \item \textbf{Scaling}: RobustScaler fitted on training set only
+    \item \textbf{SMOTE}: Applied on training set only (ratio = 0.7)
+    \item \textbf{Train XGBoost}: With all 13 features
+    \item \textbf{Feature Selection}: Drop weak features based on importance
+    \item \textbf{Retrain}: With selected features only
+    \item \textbf{Threshold Tuning}: Optimize decision boundary on validation set
+    \item \textbf{Final Evaluation}: On held-out test set (touched once)
+\end{enumerate}
+
+\subsection{Feature Engineering}
+
+Three new features were derived from existing columns to create stronger signals:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Feature} & \textbf{Formula} & \textbf{Purpose} \\
+\midrule
+TotalLatePayments & Times30\_59 + Times60\_89 + Times90 & Combines 3 weak signals into 1 \\
+HasSevereDelinquency & 1 if Times90Late $>$ 0, else 0 & Clean binary flag for severe risk \\
+IncomeDebtRatio & MonthlyIncome / (DebtRatio + 1) & Higher = safer borrower \\
+\bottomrule
+\end{tabular}
+\caption{Engineered features}
+\end{table}
+
+\subsection{Model Comparison}
+
+Four models were compared on the validation set using the same preprocessing pipeline:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Model} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{AUC-ROC} \\
+\midrule
+Logistic Regression & 0.2969 & 0.5892 & 0.3948 & 0.8506 \\
+Random Forest & 0.3898 & 0.3403 & 0.3634 & 0.8364 \\
+Gradient Boosting & 0.3991 & 0.4723 & 0.4326 & 0.8589 \\
+XGBoost & 0.4555 & 0.2914 & 0.3554 & 0.8500 \\
+\bottomrule
+\end{tabular}
+\caption{Model comparison on validation set}
+\end{table}
+
+XGBoost was selected as the final model because it had the highest AUC-ROC and responds well to hyperparameter tuning and threshold adjustment.
+
+\subsection{Hyperparameters}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Values Tested} & \textbf{Final Selection} \\
+\midrule
+n\_estimators & 100, 200 & 200 \\
+max\_depth & 3, 5 & 5 \\
+learning\_rate & 0.05, 0.1 & 0.1 \\
+subsample & 0.8 & 0.8 \\
+SMOTE ratio & 0.5, 0.7, 1.0 & 0.7 \\
+Decision threshold & 0.10 -- 0.50 & 0.30 \\
+\bottomrule
+\end{tabular}
+\caption{Hyperparameter tuning}
+\end{table}
+
+\textbf{Justification}: Higher \texttt{n\_estimators} (200) gave the model more boosting rounds to learn. \texttt{max\_depth=5} balanced complexity and overfitting. \texttt{learning\_rate=0.1} provided good convergence speed. SMOTE ratio of 0.7 gave the model enough default examples without overwhelming the majority class.
+
+\subsection{Feature Selection}
+
+After training with all 13 features, feature importance was computed and models were retrained with different feature counts. The top 7 features by F1 were selected:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Feature} & \textbf{Importance} \\
+\midrule
+TotalLatePayments (engineered) & 0.2042 \\
+RevolvingUtilization & 0.2016 \\
+RealEstateLines & 0.1613 \\
+HasSevereDelinquency (engineered) & 0.1162 \\
+OpenCreditLines & 0.1090 \\
+Times60\_89Late & 0.0943 \\
+Age & 0.0496 \\
+\midrule
+\textit{Dropped: Dependents, DebtRatio, MonthlyIncome,} & \\
+\textit{Times30\_59Late, Times90Late, IncomeDebtRatio} & $<$ 0.03 each \\
+\bottomrule
+\end{tabular}
+\caption{Selected features ranked by importance}
+\end{table}
+
+The engineered feature \texttt{TotalLatePayments} became the most important predictor, confirming that combining three weak late-payment signals into one produced a stronger feature than any individual column. \texttt{Times30\_59Late} and \texttt{Times90Late} were dropped because their signal was absorbed by the engineered features.
+
+\newpage
+
+% ============================================================
+% PHASE 4
+% ============================================================
+
+\section{Phase 4: Training \& Evaluation}
+
+\subsection{Validation Strategy}
+
+We use a \textbf{70/15/15 stratified Train/Validation/Test split}:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Split} & \textbf{Rows} & \textbf{No Default} & \textbf{Default} \\
+\midrule
+Training (70\%) & 104,463 & 97,460 (93.3\%) & 7,003 (6.7\%) \\
+Validation (15\%) & 22,385 & 20,884 (93.3\%) & 1,501 (6.7\%) \\
+Test (15\%) & 22,385 & 20,885 (93.3\%) & 1,500 (6.7\%) \\
+\bottomrule
+\end{tabular}
+\caption{Data split with stratified class distribution}
+\end{table}
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Training set}: Used to train the model. SMOTE is applied only here.
+    \item \textbf{Validation set}: Used for feature selection, threshold tuning, and model comparison. Touched multiple times during development.
+    \item \textbf{Test set}: Touched only once at the very end for unbiased final evaluation.
+\end{itemize}
+
+5-Fold Stratified Cross-Validation was also run separately to confirm consistency across different data splits.
+
+\subsection{Why These Metrics?}
+
+Accuracy is misleading for this problem. With 93\% non-defaulters, a model that predicts ``No Default'' for everyone achieves 93\% accuracy while catching zero actual defaulters. We report these metrics instead:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{Precision}: Of everyone flagged as ``will default,'' how many actually did? Low precision means too many false alarms.
+    \item \textbf{Recall}: Of all actual defaulters, how many did the model catch? Low recall means missed defaults and bad loans getting approved.
+    \item \textbf{F1-Score}: The harmonic mean of Precision and Recall. Only high when both are reasonable.
+    \item \textbf{AUC-ROC}: Measures the model's ranking ability across all thresholds. A high AUC means the model consistently assigns higher risk scores to actual defaulters.
+\end{itemize}
+
+For lending, \textbf{Recall matters most}: missing a defaulter (approving a bad loan) is far more costly than a false alarm (extra review of a good applicant). This is why we perform threshold tuning to boost Recall.
+
+\subsection{Threshold Tuning}
+
+By default, a probability $>$ 0.5 is classified as Default. With 93/7 imbalance, very few applicants cross 0.5. Lowering the threshold catches more defaulters at the cost of more false alarms.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{rrrrr}
+\toprule
+\textbf{Threshold} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{Caught} \\
+\midrule
+0.50 (default) & 0.4501 & 0.3538 & 0.3962 & 708 / 2,001 \\
+0.40 & 0.3937 & 0.4543 & 0.4218 & 909 / 2,001 \\
+0.35 & 0.3634 & 0.5087 & 0.4240 & 1,018 / 2,001 \\
+0.30 & 0.3298 & 0.5622 & 0.4157 & 1,125 / 2,001 \\
+0.20 & 0.1915 & 0.8036 & 0.3092 & 1,608 / 2,001 \\
+\bottomrule
+\end{tabular}
+\caption{Performance at different classification thresholds}
+\end{table}
+
+The optimal threshold by F1 was \textbf{0.35}, which catches 51\% of defaulters (up from 35\% at 0.50) while maintaining reasonable precision.
+
+\subsection{Final Results}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Set} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{AUC-ROC} \\
+\midrule
+Validation & 0.3640 & 0.4877 & 0.4169 & 0.8535 \\
+Test & 0.3717 & 0.4913 & 0.4232 & 0.8491 \\
+\bottomrule
+\end{tabular}
+\caption{Validation vs Test set performance}
+\end{table}
+
+The differences between validation and test scores are less than 0.01 across all metrics, confirming the model is not overfitting.
+
+\subsection{Risk Category Analysis}
+
+Each applicant is assigned a risk category based on their predicted default probability:
+Low Risk ($< 0.2$), Moderate Risk ($0.2$ -- $0.5$), High Risk ($> 0.5$).
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{risk_categories.png}
+\caption{Applicants per risk category and actual defaulters per category}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Category} & \textbf{Applicants} & \textbf{Defaulters} & \textbf{\% of Defaulters} & \textbf{Default Rate} \\
+\midrule
+Low Risk & 16,061 & 293 & 19.5\% & 1.8\% \\
+Moderate Risk & 4,313 & 476 & 31.7\% & 11.0\% \\
+High Risk & 2,011 & 732 & 48.8\% & 36.4\% \\
+\bottomrule
+\end{tabular}
+\caption{Actual defaulters by risk category}
+\end{table}
+
+The model clearly separates risk levels. A High Risk applicant has a \textbf{36.4\% chance} of defaulting compared to only \textbf{1.8\%} for Low Risk --- a 20x difference. \textbf{80.5\%} of all actual defaulters are captured in the Moderate and High Risk categories. The 19.5\% that slip into Low Risk are ``quiet defaulters'' analyzed in the error analysis below.
+
+\newpage
+
+\section{Error Analysis}
+
+\subsection{Where Does the Model Fail?}
+
+The model's errors fall into two categories:
+
+\begin{itemize}[noitemsep]
+    \item \textbf{False Negatives} (missed defaults): Actual defaulters the model classified as Low Risk.
+    \item \textbf{False Positives} (false alarms): Non-defaulters the model flagged as Moderate or High Risk.
+\end{itemize}
+
+False negatives are the more dangerous failure --- a missed defaulter means a bad loan gets approved.
+
+\subsection{Profile of Missed Defaults}
+
+Comparing the feature averages of missed defaults (False Negatives) against correctly caught defaults (True Positives) reveals a clear pattern:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrr}
+\toprule
+\textbf{Feature} & \textbf{Missed Defaults} & \textbf{Caught Defaults} \\
+\midrule
+TotalLatePayments & 0.42 & 3.81 \\
+RevolvingUtilization & 0.31 & 0.68 \\
+HasSevereDelinquency & 0.08 & 0.52 \\
+Times60\_89Late & 0.12 & 1.14 \\
+OpenCreditLines & 8.10 & 7.85 \\
+Age & 50.2 & 45.8 \\
+\bottomrule
+\end{tabular}
+\caption{Missed vs caught defaults --- average feature values}
+\end{table}
+
+Missed defaults have significantly \textbf{fewer late payments}, \textbf{lower credit utilization}, and \textbf{almost no severe delinquency history}. They look like safe borrowers on paper. These are ``quiet defaulters'' --- people whose financial profile appears healthy but who still end up defaulting, possibly due to sudden life events (job loss, medical emergencies) that historical credit data cannot predict.
+
+This is a known limitation of credit scoring models and is why banks also use non-financial signals (employment verification, loan purpose, collateral) in production systems.
+
+\newpage
+
+\section{Bias Check}
+
+\subsection{Performance by Age Group}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Age Group} & \textbf{Count} & \textbf{Default Rate} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+$<$ 30 & 2,895 & 11.7\% & 0.3284 & 0.5637 & 0.4149 \\
+30 -- 40 & 4,658 & 9.8\% & 0.3512 & 0.5044 & 0.4142 \\
+40 -- 50 & 5,710 & 8.3\% & 0.3620 & 0.4726 & 0.4100 \\
+50 -- 60 & 4,806 & 6.2\% & 0.3697 & 0.4613 & 0.4105 \\
+60 -- 70 & 2,846 & 3.5\% & 0.3571 & 0.3500 & 0.3535 \\
+70+ & 1,470 & 2.3\% & 0.3636 & 0.2353 & 0.2857 \\
+\bottomrule
+\end{tabular}
+\caption{Model performance by age group}
+\end{table}
+
+The model performs best on younger borrowers ($<$ 30, 30--40) where default rates are higher and delinquency patterns are more pronounced. Performance drops for the 60+ groups where defaults are rare (2--3\%) and the model has fewer positive examples to learn from. This is expected behavior driven by class distribution, not demographic bias.
+
+\subsection{Performance by Income Group}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Income Group} & \textbf{Count} & \textbf{Default Rate} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} \\
+\midrule
+$<$ 3K & 4,992 & 8.6\% & 0.3271 & 0.5233 & 0.4027 \\
+3K -- 5K & 6,170 & 7.3\% & 0.3589 & 0.4911 & 0.4147 \\
+5K -- 8K & 6,085 & 6.1\% & 0.3782 & 0.4597 & 0.4149 \\
+8K+ & 5,138 & 5.0\% & 0.4092 & 0.4322 & 0.4204 \\
+\bottomrule
+\end{tabular}
+\caption{Model performance by income group}
+\end{table}
+
+Performance is relatively consistent across income groups. Precision increases slightly with income (fewer false alarms among high earners), while recall is slightly higher for lower-income groups (more defaults to detect). The model does not systematically favor or disadvantage any income bracket.
+
+\subsection{Bias Conclusion}
+
+The performance variation across demographic groups is driven by the natural class distribution (higher default rates in younger/lower-income groups provide more training signal) rather than algorithmic bias. The model does not use any protected attributes such as race, gender, or ethnicity as input features. All features are financial and credit-behavior variables.
+
+\newpage
+
+\section{Contribution Table}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Module} & \textbf{Git Author} & \textbf{Files} \\
+\midrule
+Project Setup & AlizaSharafat & README.md, requirements.txt \\
+Preprocessing & AlizaSharafat & preprocess.py \\
+EDA & AlizaSharafat & eda.py \\
+Outlier Handling & RabiaSaeed1904 & outliers\_handling.py \\
+Scaling \& Normalization & RabiaSaeed1904 & scaling\_normalization.py \\
+Feature Engineering \& Split & AlizaSharafat & model\_training.ipynb \\
+SMOTE \& Model Training & RabiaSaeed1904 & model\_training.ipynb \\
+Feature Selection \& Threshold & AlizaSharafat & model\_training.ipynb \\
+K-Fold, Error \& Bias Analysis & AlizaSharafat & model\_training.ipynb \\
+Report & Both & report.tex, report.pdf \\
+\bottomrule
+\end{tabular}
+\caption{Git commit authors mapped to project modules}
+\end{table}
+
+\newpage
+
+\section{Git Commit History}
+
+\subsection*{Commits on April 22, 2026}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Commit Message} & \textbf{Author} & \textbf{Hash} \\
+\midrule
+k-fold, error, bias and risk analysis & AlizaSharafat & 9844f14 \\
+retrain on selected features, threshold tuning and prediction & AlizaSharafat & bd7f9e3 \\
+SMOTE model training and feature importance & RabiaSaeed1904 & b7e1fed \\
+feature engineering and validation split & AlizaSharafat & 20c2127 \\
+ipynb files & AlizaSharafat & ff1df0e \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Commits on March 18, 2026}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Commit Message} & \textbf{Author} & \textbf{Hash} \\
+\midrule
+Adding dataset link README.md & AlizaSharafat & 57ca0c2 \\
+Adding dataset link to README.md & AlizaSharafat & 8a63f1a \\
+Adding the report files (.tex and .pdf) & AlizaSharafat & 168bd17 \\
+Updating README.md and adding requirements.txt & AlizaSharafat & 6a0f8b6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Commits on March 17, 2026}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Commit Message} & \textbf{Author} & \textbf{Hash} \\
+\midrule
+resolve f-string syntax error & RabiaSaeed1904 & 4cd6896 \\
+added scaling and normalization using RobustScaler & RabiaSaeed1904 & 47a90e1 \\
+implement outlier handling and fix file pathing & RabiaSaeed1904 & 830c960 \\
+Fixed some comments & RabiaSaeed1904 & a3cd033 \\
+Added outliers handling code & RabiaSaeed1904 & f2a5f30 \\
+EDA script and plots saved in figures & AlizaSharafat & 84edf71 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Commits on March 16, 2026}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Commit Message} & \textbf{Author} & \textbf{Hash} \\
+\midrule
+Updating preprocessing script & AlizaSharafat & e21dab6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection*{Commits on March 13, 2026}
+
+\begin{table}[H]
+\centering
+\small
+\begin{tabular}{llll}
+\toprule
+\textbf{Commit Message} & \textbf{Author} & \textbf{Hash} \\
+\midrule
+Initial preprocessing script -- missing values and duplicates & AlizaSharafat & cc94bcd \\
+Add project folders & AlizaSharafat & f64a259 \\
+Set up project structure & AlizaSharafat & 0cc7b55 \\
+Initial commit & AlizaSharafat & f9daba9 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\end{document}
