@@ -1,51 +1,81 @@
-# CreditShield Loan Default Risk Predictor
+# CreditShield — Loan Default Risk Predictor
 
-CreditShield Loan Default Risk Predictor is a machine learning project that predicts borrower default risk using the Give Me Some Credit dataset(a competotion dataset downloaded from kaggle). The goal is to support faster and more consistent lending decisions by classifying applicants into risk categories based on their financial and credit behavior data.
+A machine learning application that predicts loan default risk using the [Give Me Some Credit](https://www.kaggle.com/competitions/GiveMeSomeCredit/data) dataset from Kaggle. The system classifies applicants into **Low**, **Moderate**, or **High Risk** categories and provides explainable insights using SHAP.
 
-## Link to the "Give Me Some Credit" Dataset
-https://www.kaggle.com/competitions/GiveMeSomeCredit/data
+## Live Demo
+
+🔗 **[https://creditshield-loan-default-predictor.streamlit.app](https://creditshield-loan-default-predictor.streamlit.app)**
 
 ## Project Objective
 
-This project develops a default risk prediction system that analyzes applicant financial and credit-related features to estimate the likelihood of serious delinquency. The model output can later be mapped into Low, Medium, and High risk categories for easier interpretation and decision-making.
+Financial institutions need fast, consistent, and transparent credit risk assessment. This project builds an ML-powered system that accepts applicant financial data and returns a default-risk prediction with SHAP-based explanations showing why the model made that decision.
 
 ## Dataset
 
-This project uses the **Give Me Some Credit** dataset.
+- **Source:** [Give Me Some Credit](https://www.kaggle.com/competitions/GiveMeSomeCredit/data) (Kaggle)
+- **Training file:** `cs-training.csv` (150,000 rows, 10 features)
+- **Target variable:** `SeriousDlqin2yrs` — whether a borrower was 90+ days late within 2 years
+- **Class balance:** 93.3% No Default / 6.7% Default
 
-- **Training file:** `cs-training.csv`
-- **Target variable:** `SeriousDlqin2yrs`
+## Model
 
-The target variable indicates whether a borrower experienced serious delinquency (90 days past due or worse) within two years.
+- **Algorithm:** XGBoost
+- **Features:** 7 selected from 13 (10 original + 3 engineered)
+- **Class imbalance:** SMOTE (ratio = 0.7)
+- **AUC-ROC:** 0.85
+- **Risk separation:** High Risk default rate = 36.4% vs Low Risk = 1.8% (20x difference)
 
-## Current Deliverable Scope
+## App Features
 
-This repository currently includes work for:
+| Tab | Description |
+|---|---|
+| **Manual Input** | Enter 10 applicant fields, get risk prediction with SHAP explanation |
+| **CSV Upload** | Upload a CSV file for batch predictions with downloadable results |
+| **What-If Analysis** | Adjust sliders in real time to see how changes affect the risk score |
 
-- Problem definition
-- Dataset understanding
-- Missing value analysis
-- Duplicate detection and removal
-- Initial preprocessing
-- Report preparation
-- Outlier handling
-- Feature scaling and normalization
-
-Further stages will include:
-
-- Model training and evaluation
-- Class imbalance handling using methods such as SMOTE
-- Explainable AI using SHAP/LIME
-- What-if analysis in the final application UI
+Every prediction includes a SHAP bar chart showing which features drove the decision and by how much.
 
 ## Repository Structure
 
-```text
+```
 CreditShield-Loan-Default-Risk-Predictor/
-│
-├── data_scripts/     # Python scripts for preprocessing and analysis
-├── figures/          # Saved charts and figures for the report
-├── reports/          # LaTeX source and final report files
-├── .gitignore        # Files and folders ignored by Git
-├── README.md         # Project overview
-└── requirements.txt  # Python dependencies
+├── app/
+│   ├── app.py                     # Streamlit web application
+│   └── models/
+│       ├── best_model.pkl
+│       ├── best_threshold.pkl
+│       ├── feature_cols.pkl
+│       ├── final_scaler.pkl
+│       ├── outlier_caps.pkl
+│       └── train_medians.pkl
+├── data_scripts/
+│   ├── preprocess.py              # Missing values, duplicates, column mapping
+│   ├── eda.py                     # EDA charts saved to figures/
+│   ├── outliers_handling.py       # Outlier detection and capping
+│   └── scaling_normalization.py   # Scaler comparison and RobustScaler
+├── figures/                       # EDA plots
+├── outputs/                       # Processed CSVs and pkl files
+├── reports/                       # LaTeX source and compiled PDF
+├── .gitignore
+├── README.md
+└── requirements.txt
+```
+
+## Data Pipeline
+
+1. **Preprocessing** — Column mapping, median imputation, duplicate removal
+2. **EDA** — 7 charts (target distribution, histograms, correlation, boxplots, age/utilization analysis)
+3. **Outlier handling** — Sentinel codes capped at 20, extreme values capped at 99th percentile
+4. **Scaling** — RobustScaler (fitted on training set only)
+5. **Feature engineering** — TotalLatePayments, HasSevereDelinquency, IncomeDebtRatio
+6. **Feature selection** — Top 7 features by importance
+7. **Model training** — XGBoost with SMOTE and threshold tuning
+8. **Deployment** — Streamlit Cloud
+
+## How to Run Locally
+
+```bash
+pip install -r requirements.txt
+cd app
+streamlit run app.py
+```
