@@ -4,7 +4,8 @@ import numpy as np
 import pickle
 import shap
 import matplotlib.pyplot as plt
-
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 st.set_page_config(page_title="CreditShield", page_icon="🛡️", layout="wide")
 
@@ -13,7 +14,7 @@ st.set_page_config(page_title="CreditShield", page_icon="🛡️", layout="wide"
 def load_artifacts():
     artifacts = {}
     for name in ["best_model", "final_scaler", "feature_cols", "best_threshold", "outlier_caps", "train_medians"]:
-        with open(f"models/{name}.pkl", "rb") as f:
+        with open(os.path.join(BASE_DIR, "models", f"{name}.pkl"), "rb") as f:
             artifacts[name] = pickle.load(f)
     return artifacts
 
