@@ -1,0 +1,343 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{float}
+\usepackage{enumitem}
+\usepackage{amsmath}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Final Report}
+\lhead{CreditShield}
+\cfoot{\thepage}
+\setlength{\headheight}{14.5pt}
+
+\titleformat{\section}{\large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{1em}{}
+
+\title{\textbf{CreditShield: Loan Default Risk Prediction\\with Explainable AI} \\ \vspace{0.5em} \large Final Report}
+\author{23L-2524 \\ 23L-2560}
+\date{\vspace{-2em}}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\large\textbf{Deployment URL:} \\
+\vspace{0.3em}
+\url{https://creditshield-loan-default-predictor.streamlit.app}
+\end{center}
+
+\vspace{1em}
+
+\section*{Abstract}
+
+This project builds a machine learning application that predicts loan default risk using the Give Me Some Credit dataset (150K borrowers, 10 financial features). We engineered 3 additional features, trained an XGBoost classifier with SMOTE for class imbalance handling, and achieved an AUC-ROC of 0.85. The model classifies applicants into Low, Moderate, or High Risk categories, with 80\% of actual defaulters correctly placed in the Moderate/High Risk groups. The application is deployed as a Streamlit web app featuring manual input, batch CSV processing, SHAP-based explainability, and a What-If analysis tool for real-time risk exploration.
+
+\tableofcontents
+\newpage
+
+% ============================================================
+% PHASE 1 & 2 (Deliverable 1 — concise)
+% ============================================================
+
+\section{Phase 1: Problem Definition}
+
+\subsection{Problem Statement}
+
+Financial institutions need fast, consistent, and explainable credit risk assessment. This project builds an ML-powered system that accepts applicant financial data and returns a default-risk prediction classified into Low, Moderate, or High Risk, along with SHAP-based explanations showing why.
+
+\subsection{Target Audience}
+
+Loan officers, credit analysts, and risk management teams at banks and lending institutions who need data-driven, auditable risk scoring.
+
+\subsection{AI Justification}
+
+Traditional rule-based scoring uses fixed thresholds that miss complex interactions between variables. ML models capture non-linear patterns (e.g., high debt ratio is acceptable for borrowers with zero delinquencies but dangerous with past late payments). XGBoost handles tabular data well, provides feature importance, and supports probability outputs needed for threshold tuning and risk categorization.
+
+\section{Phase 2: Data Acquisition \& Preprocessing}
+
+\subsection{Dataset}
+
+\textbf{Give Me Some Credit} from Kaggle --- 150,000 borrowers with 10 financial features and a binary target (default within 2 years). Class imbalance: 93.3\% No Default / 6.7\% Default.
+
+\subsection{Preprocessing Pipeline}
+
+\begin{enumerate}[noitemsep]
+    \item \textbf{Column mapping}: Renamed all columns for readability
+    \item \textbf{Missing values}: Median imputation for MonthlyIncome (19.8\% missing) and Dependents (2.6\% missing); Age = 0 replaced with median
+    \item \textbf{Duplicates}: 767 rows removed
+    \item \textbf{Outliers}: Sentinel codes (96, 98) in late payment columns capped at 20; RevolvingUtilization, DebtRatio, MonthlyIncome, OpenCreditLines, RealEstateLines capped at 99th percentile
+    \item \textbf{Scaling}: RobustScaler (uses median/IQR, robust to remaining skew)
+\end{enumerate}
+
+\subsection{Key EDA Findings}
+
+\begin{itemize}[noitemsep]
+    \item Default rate decreases with age: 11.7\% for under-30 vs 2.3\% for 70+
+    \item Default rate increases with credit utilization: 2.0\% at 0--25\% vs 37.2\% at $>$100\%
+    \item Late payment features are highly correlated (0.70--0.84) with each other
+    \item Strongest individual predictors of default: RevolvingUtilization (0.28), Times30\_59Late (0.25), Times90Late (0.24)
+\end{itemize}
+
+
+
+% ============================================================
+% PHASE 3 & 4 (Deliverable 2 — concise)
+% ============================================================
+
+\section{Phase 3: Model Architecture}
+
+\subsection{Pipeline Design}
+
+Feature Engineering $\rightarrow$ 70/15/15 Split $\rightarrow$ RobustScaler $\rightarrow$ SMOTE (0.7) $\rightarrow$ XGBoost $\rightarrow$ Feature Selection $\rightarrow$ Threshold Tuning
+
+\subsection{Feature Engineering}
+
+Three derived features were added:
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lll}
+\toprule
+\textbf{Feature} & \textbf{Formula} & \textbf{Purpose} \\
+\midrule
+TotalLatePayments & Sum of all late payment counts & Combines 3 weak signals into 1 \\
+HasSevereDelinquency & 1 if Times90Late $>$ 0 & Binary flag for severe risk \\
+IncomeDebtRatio & Income / (DebtRatio + 1) & Higher = safer borrower \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Model Selection}
+
+We tested four models: Logistic Regression, Random Forest, Gradient Boosting, and XGBoost. XGBoost was selected as the final model for the following reasons:
+
+\begin{itemize}[noitemsep]
+    \item Handles tabular data well without extensive preprocessing
+    \item Provides built-in feature importance for interpretability
+    \item Supports probability outputs needed for threshold tuning and risk categorization
+    \item Responds well to hyperparameter tuning, consistently outperforming other models after optimization
+\end{itemize}
+
+\subsection{Feature Selection}
+
+After training with all 13 features, the top 7 by importance were selected. The engineered feature TotalLatePayments became the most important predictor, confirming that combining three weak signals produced a stronger feature than any individual column.
+
+\subsection{Hyperparameters}
+
+Final configuration: n\_estimators = 200, max\_depth = 5, learning\_rate = 0.1, subsample = 0.8, SMOTE ratio = 0.7.
+
+\section{Phase 4: Evaluation}
+
+\subsection{Validation Strategy}
+
+70/15/15 stratified Train/Validation/Test split. Training set used for SMOTE and model fitting. Validation set used for feature selection, threshold tuning, and comparison. Test set touched once for final evaluation. 5-Fold Stratified CV run separately for consistency.
+
+\subsection{Why These Metrics?}
+
+Accuracy is misleading at 93/7 imbalance --- a model predicting ``No Default'' for everyone gets 93\% accuracy but catches zero defaulters. We report Precision, Recall, F1, and AUC-ROC. For lending, Recall matters most: missing a defaulter costs more than a false alarm.
+
+\subsection{Final Results}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Set} & \textbf{Precision} & \textbf{Recall} & \textbf{F1} & \textbf{AUC-ROC} \\
+\midrule
+Validation & 0.3455 & 0.5177 & 0.4144 & 0.8535 \\
+Test & 0.3422 & 0.5127 & 0.4105 & 0.8509 \\
+\bottomrule
+\end{tabular}
+\caption{Validation vs Test — differences $<$ 0.01 confirm no overfitting}
+\end{table}
+
+\subsection{Risk Categories}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{risk_categories.png}
+\caption{Applicants per risk category and actual defaulters per category}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Category} & \textbf{Applicants} & \textbf{Defaulters} & \textbf{\% of Defaulters} & \textbf{Default Rate} \\
+\midrule
+Low Risk & 16,061 & 293 & 19.5\% & 1.8\% \\
+Moderate Risk & 4,313 & 476 & 31.7\% & 11.0\% \\
+High Risk & 2,011 & 732 & 48.8\% & 36.4\% \\
+\bottomrule
+\end{tabular}
+\caption{80.5\% of defaulters captured in Moderate + High Risk}
+\end{table}
+
+\subsection{Error Analysis}
+
+The model's false negatives (missed defaults) have significantly fewer late payments, lower utilization, and almost no severe delinquency. These ``quiet defaulters'' look safe on paper but still default, likely due to sudden life events that historical credit data cannot predict.
+
+\subsection{Bias Check}
+
+Performance varies by age group (better for younger borrowers where defaults are more common) but is consistent across income groups. Variation is driven by class distribution, not algorithmic bias. No protected attributes (race, gender) are used as features.
+
+
+
+% ============================================================
+% PHASE 5 (Deliverable 3 — detailed)
+% ============================================================
+
+\section{Phase 5: Deployment}
+
+\subsection{Deployment Details}
+
+\begin{table}[H]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Platform & Streamlit Community Cloud \\
+URL & \url{https://creditshield-loan-default-predictor.streamlit.app} \\
+Framework & Streamlit (Python) \\
+Model & XGBoost (loaded from pickle) \\
+Explainability & SHAP (TreeExplainer) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The application provides three modes of interaction through a tabbed interface: Manual Input for individual applicants, CSV Upload for batch processing, and What-If Analysis for real-time risk exploration.
+
+\subsection{Tab 1: Manual Input}
+
+The user enters 10 financial attributes for an individual applicant and clicks ``Predict Risk.'' The app runs the full preprocessing pipeline (outlier capping, feature engineering, scaling) and returns:
+
+\begin{itemize}[noitemsep]
+    \item The risk category (Low, Moderate, or High Risk) with a colored banner
+    \item The exact default probability as a percentage
+    \item A SHAP bar chart showing which features drove this specific prediction
+    \item A text summary of the top 3 contributing factors
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{manual_input.png}
+\caption{Manual input form with 10 applicant fields}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{manual_result.png}
+\caption{Prediction result with SHAP explanation --- this applicant is classified as Low Risk (7.4\% default probability). The SHAP chart shows OpenCreditLines and TotalLatePayments are the strongest factors reducing risk, while Age is the only factor slightly increasing it.}
+\end{figure}
+
+
+
+\subsection{Tab 2: CSV Upload}
+
+The user uploads a CSV file containing multiple applicants. The app auto-detects both the original Kaggle column names and the mapped names, preprocesses all rows using training-set parameters, and returns batch predictions.
+
+We tested this by uploading the Kaggle competition's test file (cs-test.csv, 101,503 applicants) which has no target column --- exactly the scenario the app is designed for.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{csv_result.png}
+\caption{Batch prediction results on 101,503 applicants from the Kaggle test set. The model classified 73,772 as Low Risk (72.7\%), 19,305 as Moderate Risk (19.0\%), and 8,426 as High Risk (8.3\%). Results are downloadable as a CSV file.}
+\end{figure}
+
+\subsection{Tab 3: What-If Analysis}
+
+This tab satisfies the requirement for an interactive ``What-If'' feature. All 10 input variables are presented as sliders. As the user adjusts any slider, the risk score, risk category, and SHAP explanation chart update in real time.
+
+This allows a loan officer to explore questions like: ``If this applicant's income increased from \$3,000 to \$6,000, would they still be High Risk?'' or ``How many late payments does it take to push someone from Low to Moderate Risk?''
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{whatif_sliders.png}
+\caption{What-If Analysis sliders --- the user can adjust any variable in real time}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{whatif_result.png}
+\caption{What-If result for a 25-year-old with 1 late payment at 90+ days: Moderate Risk at 41.4\%. The SHAP chart shows TotalLatePayments and HasSevereDelinquency are the primary risk drivers, while OpenCreditLines and RevolvingUtilization are reducing the risk.}
+\end{figure}
+
+\subsection{Explainability (SHAP)}
+
+Every prediction across all three tabs includes a SHAP explanation. SHAP (SHapley Additive exPlanations) computes the contribution of each feature to a specific prediction. Red bars indicate features pushing toward default, green bars push toward no default. The bar length represents the magnitude of impact.
+
+This satisfies the XAI requirement: the user does not just see ``High Risk'' --- they see \textit{why} the model made that decision and which factors they could address to reduce the risk.
+
+
+
+% ============================================================
+% CONCLUSION
+% ============================================================
+
+\section{Conclusion}
+
+\subsection{Summary}
+
+CreditShield successfully demonstrates an end-to-end ML pipeline: from raw data preprocessing through model training to a deployed, explainable web application. The XGBoost model achieves an AUC-ROC of 0.85, correctly placing 80.5\% of actual defaulters into Moderate or High Risk categories. High Risk applicants have a 36.4\% default rate compared to 1.8\% for Low Risk --- a 20x separation.
+
+\subsection{Limitations}
+
+\begin{itemize}[noitemsep]
+    \item 19.5\% of defaulters still fall into Low Risk (``quiet defaulters'' with clean-looking profiles)
+    \item The model relies entirely on historical financial data and cannot predict defaults caused by sudden life events
+    \item The dataset lacks non-financial features (employment type, loan purpose) that could improve predictions
+\end{itemize}
+
+\subsection{Future Work}
+
+\begin{itemize}[noitemsep]
+    \item Incorporate additional data sources (employment verification, loan purpose, collateral)
+    \item Experiment with deep learning models or ensemble stacking
+    \item Add time-series credit behavior features (trend of utilization over months)
+\end{itemize}
+
+
+
+% ============================================================
+% CONTRIBUTION & GIT HISTORY
+% ============================================================
+
+\newpage
+
+\section{Repository Structure}
+
+\begin{verbatim}
+CreditShield-Loan-Default-Risk-Predictor/
+|-- app/
+|   |-- app.py
+|   |-- models/
+|       |-- best_model.pkl
+|       |-- best_threshold.pkl
+|       |-- feature_cols.pkl
+|       |-- final_scaler.pkl
+|       |-- outlier_caps.pkl
+|       |-- train_medians.pkl
+|-- data_scripts/
+|   |-- preprocess.py
+|   |-- eda.py
+|   |-- outliers_handling.py
+|   |-- scaling_normalization.py
+|-- figures/
+|-- outputs/
+|-- reports/
+|-- .gitignore
+|-- README.md
+|-- requirements.txt
+\end{verbatim}
+
+\end{document}
